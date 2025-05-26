@@ -1,8 +1,12 @@
 from collections import defaultdict
 import gymnasium as gym
 import numpy as np
+import Stackle
 
-
+def getHashable(ndarray)->tuple:
+    return tuple(ndarray.tolist())
+def hashableObs(obs)->tuple:
+    return (getHashable(obs["agent"]),getHashable(obs["target"]))
 class GridderAgent:
     def __init__(
         self,
@@ -36,17 +40,17 @@ class GridderAgent:
 
         self.training_error = []
 
-    def get_action(self, obs: tuple[int, int, bool]) -> int:
+    def get_action(self, obs: tuple[int, int, bool], test=False) -> int:
         """
         Returns the best action with probability (1 - epsilon)
         otherwise a random action with probability epsilon to ensure exploration.
         """
         # with probability epsilon return a random action to explore the environment
-        if np.random.random() < self.epsilon:
+        if not test and np.random.random() < self.epsilon:
             return self.env.action_space.sample()
         # with probability (1 - epsilon) act greedily (exploit)
         else:
-            return int(np.argmax(self.q_values[obs]))
+            return int(np.argmax(self.q_values[hashableObs(obs)]))
 
     def update(
         self,
@@ -57,6 +61,8 @@ class GridderAgent:
         next_obs: tuple[int, int, bool],
     ):
         """Updates the Q-value of an action."""
+        obs = hashableObs(obs)
+        next_obs = hashableObs(next_obs)
         future_q_value = (not terminated) * np.max(self.q_values[next_obs])
         temporal_difference = (
             reward + self.discount_factor * future_q_value - self.q_values[obs][action]
@@ -77,7 +83,7 @@ start_epsilon = 1.0
 epsilon_decay = start_epsilon / (n_episodes / 2)  # reduce the exploration over time
 final_epsilon = 0.1
 
-env = gym.make("Gridder-v1", sab=False)
+env = gym.make("Stackle/GridWorld-v0")
 env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=n_episodes)
 
 agent = GridderAgent(
@@ -146,3 +152,21 @@ training_error_moving_average = get_moving_avgs(
 axs[2].plot(range(len(training_error_moving_average)), training_error_moving_average)
 plt.tight_layout()
 plt.show()
+
+for _ in range(10):
+    env = gym.make("Stackle/GridWorld-v0", render_mode="human")
+    obs, info = env.reset()
+
+    done = False
+    while not done:
+        action = agent.get_action(obs, test=True)
+        next_obs, reward, terminated, truncated, info = env.step(action)
+
+        # update the agent
+        agent.update(obs, action, reward, terminated, next_obs)
+
+        # update if the environment is done and the current obs
+        done = terminated or truncated
+        obs = next_obs
+
+    env.close()
