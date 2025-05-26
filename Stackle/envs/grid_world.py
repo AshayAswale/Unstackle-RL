@@ -26,7 +26,6 @@ class GridWorldEnv(gym.Env):
         self.observation_space = spaces.Dict(
             {
                 "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "target": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "colored": spaces.Box(0, size - 1, shape=(size*size,), dtype=int), # this can be a boolean vector. if 1, color it
             }
         )
@@ -61,29 +60,21 @@ class GridWorldEnv(gym.Env):
         self.clock = None
 
     def _get_obs(self):
-        return {"agent": self._agent_location, "target": self._target_location, "colored":self._colored_cells}
+        return {"agent": self._agent_location, "colored":self._colored_cells}
 
     def _get_info(self):
         return {
-            "distance": np.linalg.norm(
-                self._agent_location - self._target_location, ord=1
-            )
+            "distance": sum(self._colored_cells)
         }
 
     def reset(self, seed=None, options=None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
+        self.iter = 0
+        self.max_iter = 500
 
         # Choose the agent's location uniformly at random
         self._agent_location = self.np_random.integers(0, self.size, size=2, dtype=int)
-
-        # We will sample the target's location randomly until it does not
-        # coincide with the agent's location
-        self._target_location = self._agent_location
-        while np.array_equal(self._target_location, self._agent_location):
-            self._target_location = self.np_random.integers(
-                0, self.size, size=2, dtype=int
-            )
 
         self._colored_cells = np.zeros((self.size*self.size), dtype=int)
 
@@ -102,7 +93,25 @@ class GridWorldEnv(gym.Env):
     def getPositionOfIndex(self, index)->np.array:
         return np.array((index//self.size, index%self.size))
     
+    def manhattan_distance_to_nearest_zero(self, grid_flat, pos):
+      """
+      grid_flat: list or 1D array of 0s and 1s representing a 2D grid flattened row-wise
+      pos: [x, y] current position
+      grid_size: (width, height) of the grid
+      """
+      min_dist = float('inf')
+
+      for i in range(len(grid_flat)):
+          if grid_flat[i] == 0:
+              x = i % self.size
+              y = i // self.size
+              dist = abs(pos[0] - x) + abs(pos[1] - y)
+              min_dist = min(min_dist, dist)
+
+      return min_dist if min_dist != float('inf') else 0 
+      
     def step(self, action):
+        # self.iter+=1
         # Map the action (element of {0,1,2,3}) to the direction we walk in
         if action != Actions.color.value:
             direction = self._action_to_direction[action]
@@ -115,15 +124,15 @@ class GridWorldEnv(gym.Env):
             self._colored_cells[colored_box_index]=1
 
         # An episode is done iff the agent has reached the target
-        terminated = np.array_equal(self._agent_location, self._target_location)
-        reward = 1 if terminated else 0  # Binary sparse rewards
+        terminated = sum(self._colored_cells)==self.size*self.size
+        reward = sum(self._colored_cells)*100-self.manhattan_distance_to_nearest_zero(self._colored_cells, self._agent_location)
         observation = self._get_obs()
         info = self._get_info()
 
         if self.render_mode == "human":
             self._render_frame()
 
-        return observation, reward, terminated, False, info
+        return observation, reward, terminated, self.iter>self.max_iter, info
 
     def render(self):
         if self.render_mode == "rgb_array":
@@ -142,16 +151,6 @@ class GridWorldEnv(gym.Env):
         pix_square_size = (
             self.window_size / self.size
         )  # The size of a single grid square in pixels
-
-        # First we draw the target
-        pygame.draw.rect(
-            canvas,
-            (255, 0, 0),
-            pygame.Rect(
-                pix_square_size * self._target_location,
-                (pix_square_size, pix_square_size),
-            ),
-        )
 
         for colored_cell, val in enumerate(self._colored_cells):
           if val:

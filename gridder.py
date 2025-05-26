@@ -6,7 +6,7 @@ import Stackle
 def getHashable(ndarray)->tuple:
     return tuple(ndarray.tolist())
 def hashableObs(obs)->tuple:
-    return (getHashable(obs["agent"]),getHashable(obs["target"]))
+    return (getHashable(obs["agent"]),getHashable(obs["colored"]))
 class GridderAgent:
     def __init__(
         self,
@@ -75,6 +75,7 @@ class GridderAgent:
 
     def decay_epsilon(self):
         self.epsilon = max(self.final_epsilon, self.epsilon - self.epsilon_decay)
+from gymnasium.wrappers import RecordVideo
 
 # hyperparameters
 learning_rate = 0.01
@@ -83,7 +84,10 @@ start_epsilon = 1.0
 epsilon_decay = start_epsilon / (n_episodes / 2)  # reduce the exploration over time
 final_epsilon = 0.1
 
-env = gym.make("Stackle/GridWorld-v0")
+training_period = 1000  # record the agent's episode every 250
+env = gym.make("Stackle/GridWorld-v0", render_mode="rgb_array")
+env = RecordVideo(env, video_folder="gridder", name_prefix="training",
+                  episode_trigger=lambda x: x % training_period == 0)
 env = gym.wrappers.RecordEpisodeStatistics(env, buffer_length=n_episodes)
 
 agent = GridderAgent(
