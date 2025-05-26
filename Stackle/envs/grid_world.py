@@ -10,10 +10,11 @@ class Actions(Enum):
     up = 1
     left = 2
     down = 3
+    color = 4
 
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
+    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 15}
 
     def __init__(self, render_mode=None, size=5):
         self.size = size  # The size of the square grid
@@ -26,11 +27,12 @@ class GridWorldEnv(gym.Env):
             {
                 "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                 "target": spaces.Box(0, size - 1, shape=(2,), dtype=int),
+                "colored": spaces.Box(0, size - 1, shape=(size*size,), dtype=int), # this can be a boolean vector. if 1, color it
             }
         )
 
-        # We have 4 actions, corresponding to "right", "up", "left", "down", "right"
-        self.action_space = spaces.Discrete(4)
+        # We have 5 actions, corresponding to "right", "up", "left", "down", "color"
+        self.action_space = spaces.Discrete(5)
 
         """
         The following dictionary maps abstract actions from `self.action_space` to 
@@ -42,6 +44,7 @@ class GridWorldEnv(gym.Env):
             Actions.up.value: np.array([0, 1]),
             Actions.left.value: np.array([-1, 0]),
             Actions.down.value: np.array([0, -1]),
+            Actions.color.value: np.array([0, 0])
         }
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -58,7 +61,7 @@ class GridWorldEnv(gym.Env):
         self.clock = None
 
     def _get_obs(self):
-        return {"agent": self._agent_location, "target": self._target_location}
+        return {"agent": self._agent_location, "target": self._target_location, "colored":self._colored_cells}
 
     def _get_info(self):
         return {
@@ -82,6 +85,8 @@ class GridWorldEnv(gym.Env):
                 0, self.size, size=2, dtype=int
             )
 
+        self._colored_cells = np.zeros((self.size*self.size), dtype=int)
+
         observation = self._get_obs()
         info = self._get_info()
 
@@ -90,13 +95,25 @@ class GridWorldEnv(gym.Env):
 
         return observation, info
 
+    def getIndexOfPosition(self, position)->int:
+        x,y = position
+        return self.size*x+y
+    
+    def getPositionOfIndex(self, index)->np.array:
+        return np.array((index//self.size, index%self.size))
+    
     def step(self, action):
         # Map the action (element of {0,1,2,3}) to the direction we walk in
-        direction = self._action_to_direction[action]
-        # We use `np.clip` to make sure we don't leave the grid
-        self._agent_location = np.clip(
-            self._agent_location + direction, 0, self.size - 1
-        )
+        if action != Actions.color.value:
+            direction = self._action_to_direction[action]
+            # We use `np.clip` to make sure we don't leave the grid
+            self._agent_location = np.clip(
+                self._agent_location + direction, 0, self.size - 1
+            )
+        else:
+            colored_box_index = self.getIndexOfPosition(self._agent_location)
+            self._colored_cells[colored_box_index]=1
+
         # An episode is done iff the agent has reached the target
         terminated = np.array_equal(self._agent_location, self._target_location)
         reward = 1 if terminated else 0  # Binary sparse rewards
@@ -135,6 +152,18 @@ class GridWorldEnv(gym.Env):
                 (pix_square_size, pix_square_size),
             ),
         )
+
+        for colored_cell, val in enumerate(self._colored_cells):
+          if val:
+            pygame.draw.rect(
+                canvas,
+                (0, 255, 0),
+                pygame.Rect(
+                    pix_square_size * self.getPositionOfIndex(colored_cell),
+                    (pix_square_size, pix_square_size),
+                ),
+            )
+
         # Now we draw the agent
         pygame.draw.circle(
             canvas,
