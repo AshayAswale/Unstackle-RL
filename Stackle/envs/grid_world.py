@@ -25,8 +25,8 @@ class GridWorldEnv(gym.Env):
         # i.e. MultiDiscrete([size, size]).
         self.observation_space = spaces.Dict(
             {
-                "agent": spaces.Box(0, 1, shape=(size*size,), dtype=int),
-                "colored": spaces.Box(0, 1, shape=(size*size,), dtype=int), # this can be a boolean vector. if 1, color it
+                "agent": spaces.Box(0, 1, shape=(size,size), dtype=int),
+                "colored": spaces.Box(0, 1, shape=(size,size), dtype=int), # this can be a boolean vector. if 1, color it
             }
         )
 
@@ -39,11 +39,11 @@ class GridWorldEnv(gym.Env):
         i.e. 0 corresponds to "right", 1 to "up" etc.
         """
         self._action_to_direction = {
-            Actions.right.value: self.size,
-            Actions.up.value: -1,
-            Actions.left.value: -self.size,
-            Actions.down.value: 1,
-            Actions.color.value: 0,
+            Actions.right.value: np.array([1, 0]),
+            Actions.up.value: np.array([0, -1]),
+            Actions.left.value: np.array([-1, 0]),
+            Actions.down.value: np.array([0, 1]),
+            Actions.color.value: np.array([0, 0])
         }
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -74,10 +74,11 @@ class GridWorldEnv(gym.Env):
         self.max_iter = 500
 
         # Choose the agent's location uniformly at random
-        self._agent_location = np.zeros((self.size*self.size), dtype=int)
-        self._agent_location[np.random.randint(0,self.size*self.size)] = 1
+        self._agent_location = np.zeros((self.size,self.size), dtype=int)
+        self._agent_location[np.random.randint(0,self.size),
+                             np.random.randint(0,self.size)] = 1
 
-        self._colored_cells = np.zeros((self.size*self.size), dtype=int)
+        self._colored_cells = np.zeros((self.size,self.size), dtype=int)
 
         observation = self._get_obs()
         info = self._get_info()
@@ -87,54 +88,32 @@ class GridWorldEnv(gym.Env):
 
         return observation, info
 
-    def getIndexOfPosition(self, position)->int:
-        x,y = position
-        return self.size*x+y
-    
-    def getPositionOfIndex(self, index)->np.array:
-        return np.array((index//self.size, index%self.size))
-    
-    def manhattan_distance_to_nearest_zero(self, grid_flat, pos):
-      """
-      grid_flat: list or 1D array of 0s and 1s representing a 2D grid flattened row-wise
-      pos: [x, y] current position
-      grid_size: (width, height) of the grid
-      """
-      min_dist = float('inf')
-
-      for i in range(len(grid_flat)):
-          target_pos_mx = min(pos+i, len(grid_flat)-1)
-          target_pos_mn = min(pos-i, 0)
-          if (not grid_flat[target_pos_mx]) or (not grid_flat[target_pos_mn]):
-              return i
-      return 0
-      
     def step(self, action):
         self.iter+=1
         reward = 0
         # Map the action (element of {0,1,2,3}) to the direction we walk in
         if action != Actions.color.value:
             direction = self._action_to_direction[action]
-            old_pos = np.argmax(self._agent_location)
-            new_pos = old_pos+direction
             reward -= 0.005
-            if 0<=new_pos<self.size*self.size:
-              # We use `np.clip` to make sure we don't leave the grid
-              self._agent_location[old_pos] = 0
-              self._agent_location[new_pos] = 1
-              if not self._colored_cells[new_pos]:
-                  reward+=0.01
+            # We use `np.clip` to make sure we don't leave the grid
+            old_pos = np.argwhere(self._agent_location==1)[0]
+            new_pos = np.clip(
+                old_pos+direction, 0, self.size - 1
+            )
+            if not self._colored_cells[new_pos[0],new_pos[1]]:
+                reward+=0.01
+            self._agent_location[old_pos[0],old_pos[1]] = 0
+            self._agent_location[new_pos[0],new_pos[1]] = 1
         else:
-            colored_box_index = np.argmax(self._agent_location)
-            if not self._colored_cells[colored_box_index]:
-              self._colored_cells[colored_box_index]=1
+            colored_box_index = np.argwhere(self._agent_location==1)[0]
+            if not self._colored_cells[colored_box_index[0], colored_box_index[1]]:
+              self._colored_cells[colored_box_index[0], colored_box_index[1]]=1
               give_reward = True
               reward += 1
             else:
               reward -= 0.2
-
         # An episode is done iff the agent has reached the target
-        terminated = sum(self._colored_cells)==self.size*self.size
+        terminated = np.sum(self._colored_cells)==self.size*self.size
         # reward = -self.manhattan_distance_to_nearest_zero(self._colored_cells, np.argmax(self._agent_location))
         if terminated:
             reward+=100
@@ -164,19 +143,18 @@ class GridWorldEnv(gym.Env):
             self.window_size / self.size
         )  # The size of a single grid square in pixels
 
-        for colored_cell, val in enumerate(self._colored_cells):
-          if val:
-            pygame.draw.rect(
-                canvas,
-                (0, 255, 0),
-                pygame.Rect(
-                    pix_square_size * self.getPositionOfIndex(colored_cell),
-                    (pix_square_size, pix_square_size),
-                ),
-            )
+        for val in (np.argwhere(self._colored_cells==1)):
+          pygame.draw.rect(
+              canvas,
+              (0, 255, 0),
+              pygame.Rect(
+                  pix_square_size * val,
+                  (pix_square_size, pix_square_size),
+              ),
+          )
 
         # Now we draw the agent
-        agent_position = self.getPositionOfIndex(np.argmax(self._agent_location))
+        agent_position = np.argwhere(self._agent_location==1)[0]
         pygame.draw.circle(
             canvas,
             (0, 0, 255),
