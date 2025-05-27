@@ -20,7 +20,7 @@ for episode in range(1, episodes + 1):
 
     env.render()        
 
-    action, _ = model.predict(obs)
+    action, _ = model.predict(obs, deterministic=False)
 
     obs, reward, terminated, truncated, info = env.step(action.tolist())    
 

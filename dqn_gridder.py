@@ -6,14 +6,17 @@ import torch
 import Stackle
 from gymnasium.wrappers import RecordVideo
 from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3 import PPO
 
 training_period = 100  # record the agent's episode every 250
 # Create the Lunar Lander environment
 env = gym.make("Stackle/GridWorld-v0", render_mode="rgb_array")
-eval_env = gym.make("Stackle/GridWorld-v0")  # Separate eval env
-env = RecordVideo(env, video_folder="gridder", name_prefix="training",
-                  episode_trigger=lambda x: x % training_period == 0)
+eval_env = gym.make("Stackle/GridWorld-v0", render_mode="rgb_array")  # Separate eval env
+# env = RecordVideo(env, video_folder="gridder", name_prefix="training",
+#                   episode_trigger=lambda x: x % training_period == 0)
 # Define the DQN model
+# model = PPO("MultiInputPolicy", env, verbose=1, device="cuda")
+
 model = DQN(
     "MultiInputPolicy",
     env,
@@ -34,17 +37,16 @@ eval_callback = EvalCallback(
     best_model_save_path="./best_model",
     log_path="./logs",
     eval_freq=10_000,
-    deterministic=True,
+    deterministic=False,
+    n_eval_episodes=5,
     render=False,
     verbose=1
 )
 
 # Train the model
-model.learn(total_timesteps=350_000, callback=eval_callback)
+model.learn(total_timesteps=250_000, callback=eval_callback)
 
 # Evaluate the trained mode
 mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)
 print(f"Mean reward: {mean_reward} +/- {std_reward}")
 
-# Optionally, save the model
-model.save("dqn_5x5_gridder")
