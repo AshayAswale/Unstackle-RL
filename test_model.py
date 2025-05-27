@@ -2,10 +2,11 @@ import gymnasium as gym
 import Stackle
 import time
 from stable_baselines3 import DQN
+from sb3_contrib import QRDQN
 
 env = gym.make("Stackle/GridWorld-v0", render_mode="human")
 # Load the model if needed
-model = DQN.load("dqn_3x3_gridder")
+model = DQN.load("best_model\\best_model")
 # Visualize the model's performance
 episodes = 5
 

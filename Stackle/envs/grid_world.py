@@ -16,7 +16,7 @@ class Actions(Enum):
 class GridWorldEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
-    def __init__(self, render_mode=None, size=3):
+    def __init__(self, render_mode=None, size=5):
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
 
@@ -117,11 +117,13 @@ class GridWorldEnv(gym.Env):
             direction = self._action_to_direction[action]
             old_pos = np.argmax(self._agent_location)
             new_pos = old_pos+direction
-            reward -= 0.05
+            reward -= 0.005
             if 0<=new_pos<self.size*self.size:
               # We use `np.clip` to make sure we don't leave the grid
               self._agent_location[old_pos] = 0
               self._agent_location[new_pos] = 1
+              if not self._colored_cells[new_pos]:
+                  reward+=0.01
         else:
             colored_box_index = np.argmax(self._agent_location)
             if not self._colored_cells[colored_box_index]:
@@ -129,7 +131,7 @@ class GridWorldEnv(gym.Env):
               give_reward = True
               reward += 1
             else:
-              reward -= 0.1
+              reward -= 0.2
 
         # An episode is done iff the agent has reached the target
         terminated = sum(self._colored_cells)==self.size*self.size
