@@ -17,19 +17,21 @@ eval_env = gym.make("Stackle/GridWorld-v0", render_mode="rgb_array")  # Separate
 # Define the DQN model
 # model = PPO("MultiInputPolicy", env, verbose=1, device="cuda")
 
-model = DQN(
-    "MultiInputPolicy",
-    env,
-    learning_rate=1e-4,
-    buffer_size=100_000,
-    batch_size=128,
-    exploration_fraction=0.5,
-    exploration_final_eps=0.01,
-    train_freq=4,
-    gamma=0.99,
-    verbose=1,
-    device="cuda"
-)
+model = DQN.load("best_model\\complete_but_long")
+model.set_env(env)
+# model = DQN(
+#     "MultiInputPolicy",
+#     env,
+#     learning_rate=1e-4,
+#     buffer_size=100_000,
+#     batch_size=128,
+#     exploration_fraction=0.5,
+#     exploration_final_eps=0.01,
+#     train_freq=4,
+#     gamma=0.99,
+#     verbose=1,
+#     device="cuda"
+# )
 
 # Callback: evaluates every 10k steps, saves best to ./best_model
 eval_callback = EvalCallback(
@@ -44,7 +46,7 @@ eval_callback = EvalCallback(
 )
 
 # Train the model
-model.learn(total_timesteps=250_000, callback=eval_callback)
+model.learn(total_timesteps=150_000, callback=eval_callback)
 
 # Evaluate the trained mode
 mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=10)

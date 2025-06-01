@@ -3,6 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import pygame
 import numpy as np
+from collections import defaultdict
 
 
 class Actions(Enum):
@@ -82,15 +83,25 @@ class GridWorldEnv(gym.Env):
 
         observation = self._get_obs()
         info = self._get_info()
+        self.remaining_locations=set([(i,j) for i in range(self.size) for j in range(self.size)])
+        self.attendance = defaultdict(int)
 
         if self.render_mode == "human":
             self._render_frame()
 
         return observation, info
+    
+    def getDistToNearestVacant(self, agent_location):
+        ret =float('inf')
+        for location in self.remaining_locations:
+            dist = abs(location[0]-agent_location[0])
+            dist += abs(location[1]-agent_location[1])
+            ret = min(dist, ret)
+        return ret
 
     def step(self, action):
         self.iter+=1
-        reward = 0
+        reward = -0.1
         # Map the action (element of {0,1,2,3}) to the direction we walk in
         if action != Actions.color.value:
             direction = self._action_to_direction[action]
@@ -104,12 +115,19 @@ class GridWorldEnv(gym.Env):
                 reward+=0.01
             self._agent_location[old_pos[0],old_pos[1]] = 0
             self._agent_location[new_pos[0],new_pos[1]] = 1
+            dist = self.getDistToNearestVacant(new_pos)
+            reward -= dist*0.01
+            reward -= self.attendance[tuple(new_pos)]*0.01
+            self.attendance[tuple(new_pos)]+=1
         else:
             colored_box_index = np.argwhere(self._agent_location==1)[0]
+            loc_tuple = tuple(colored_box_index)
+            reward -= self.attendance[loc_tuple]*0.01
+            self.attendance[loc_tuple]+=1
             if not self._colored_cells[colored_box_index[0], colored_box_index[1]]:
               self._colored_cells[colored_box_index[0], colored_box_index[1]]=1
-              give_reward = True
               reward += 1
+              self.remaining_locations.remove(loc_tuple)
             else:
               reward -= 0.2
         # An episode is done iff the agent has reached the target
